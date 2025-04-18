@@ -10,7 +10,7 @@ public class CallDetectorPlugin: NSObject, FlutterPlugin {
 
 // ios/call_detector.podspec
 Pod::Spec.new do |s|
-  s.name             = 'call_detector'
+  s.name             = 'call_state_handler'
   s.version          = '0.0.1'
   s.summary          = 'A Flutter plugin to detect phone and video calls'
   s.description      = <<-DESC
