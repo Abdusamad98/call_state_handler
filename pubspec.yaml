@@ -1,4 +1,4 @@
-name: call_detector
+name: call_state_handler
 description: "A new Flutter package project."
 version: 0.0.1
 homepage: https://github.com/Abdusamad98/call_state_handler
@@ -24,7 +24,7 @@ flutter:
   plugin:
     platforms:
       android:
-        package: com.example.call_detector
+        package: com.example.call_state_handler
         pluginClass: CallDetectorPlugin
       ios:
         pluginClass: CallDetectorPlugin

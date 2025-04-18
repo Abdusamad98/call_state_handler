@@ -1,12 +1,12 @@
 // android/src/main/kotlin/com/example/call_detector/CallStateCallback.kt
-package com.example.call_detector
+package com.example.call_state_handler
 
 interface CallStateCallback {
     fun onCallStateChanged(isCallActive: Boolean, callType: String)
 }
 
 // android/src/main/kotlin/com/example/call_detector/CallDetectorPlugin.kt
-package com.example.call_detector
+package com.example.call_state_handler
 
 import android.content.Context
 import android.media.AudioManager
