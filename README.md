@@ -19,10 +19,10 @@ No special permissions required
 No additional setup required for Android.
 ## iOS
 Update your Info.plist file to include the following:
-
+```
 <key>NSCallingCapabilityUsageDescription</key>
 <string>App needs call detection to pause activities during calls</string>
-
+```
 
 ## How It Works
 ## Android
