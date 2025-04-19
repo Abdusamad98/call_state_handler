@@ -29,8 +29,7 @@ Implements CallKit's CXCallObserver to monitor call states on iOS devices.
 
 ## Usage
 ## Basic Implementation
-import 'package:call_state_handler/call_detector.dart';
-import 'package:flutter/material.dart';
+
 
 class CallMonitorExample extends StatefulWidget {
   @override
