@@ -88,10 +88,7 @@ class _CallMonitorExampleState extends State<CallMonitorExample> {
 ```
 ## With BLoC/Cubit
 
-import 'dart:async';
-import 'package:bloc/bloc.dart';
-import 'package:call_state_handler/call_detector.dart';
-
+```
 class CallMonitorCubit extends Cubit<CallState> {
   final CallDetector _callDetector = CallDetector();
   StreamSubscription<CallState>? _subscription;
@@ -116,7 +113,7 @@ class CallMonitorCubit extends Cubit<CallState> {
 }
 
 
-
+```
 ## Error Handling
 The plugin automatically handles most error cases. If you encounter any issues, make sure to:
 
