@@ -1,10 +1,4 @@
 package com.example.call_state_handler
-
-interface CallStateCallback {
-    fun onCallStateChanged(isCallActive: Boolean, callType: String)
-}
-
-
 import android.content.Context
 import android.media.AudioManager
 import android.os.Handler

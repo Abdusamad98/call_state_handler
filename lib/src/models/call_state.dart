@@ -1,4 +1,3 @@
-// lib/src/models/call_state.dart
 enum CallType { none, phoneCall, videoCall }
 
 class CallState {
