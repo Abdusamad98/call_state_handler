@@ -2,11 +2,16 @@
 A Flutter plugin that detects phone calls and video calls on both Android and iOS platforms. This plugin helps you monitor call states in your app, allowing you to take appropriate actions when calls start or end.
 
 ## Features
-Detect when a phone call is active or ended
-Distinguish between regular phone calls and video/VoIP calls
-Works on both Android and iOS platforms
-Simple Stream-based API for reactive UI updates
-Low battery consumption
+Detect when a phone call is active or ended  
+
+Distinguish between regular phone calls and video/VoIP calls  
+
+Works on both Android and iOS platforms  
+
+Simple Stream-based API for reactive UI updates  
+
+Low battery consumption  
+
 No special permissions required
 
 ## Platform-specific Setup
