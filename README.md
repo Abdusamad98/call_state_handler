@@ -30,7 +30,7 @@ Implements CallKit's CXCallObserver to monitor call states on iOS devices.
 ## Usage
 ## Basic Implementation
 
-
+```
 class CallMonitorExample extends StatefulWidget {
   @override
   _CallMonitorExampleState createState() => _CallMonitorExampleState();
@@ -85,7 +85,7 @@ class _CallMonitorExampleState extends State<CallMonitorExample> {
     );
   }
 }
-
+```
 ## With BLoC/Cubit
 
 import 'dart:async';
