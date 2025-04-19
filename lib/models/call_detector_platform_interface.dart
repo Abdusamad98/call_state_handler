@@ -1,5 +1,5 @@
-import 'package:call_state_handler/src/models/call_state.dart';
-import 'package:call_state_handler/src/models/method_channel_call_detector.dart';
+import 'package:call_state_handler/models/call_state.dart';
+import 'package:call_state_handler/models/method_channel_call_detector.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 abstract class CallDetectorPlatform extends PlatformInterface {

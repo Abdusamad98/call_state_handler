@@ -1,17 +1,17 @@
 import 'dart:async';
 
-import 'package:call_state_handler/src/models/call_detector_platform_interface.dart';
-import 'package:call_state_handler/src/models/call_state.dart';
+import 'package:call_state_handler/models/call_detector_platform_interface.dart';
+import 'package:call_state_handler/models/call_state.dart';
 
-class CallDetector {
-  static CallDetector? _instance;
+class CallStateHandler {
+  static CallStateHandler? _instance;
 
-  factory CallDetector() {
-    _instance ??= CallDetector._();
+  factory CallStateHandler() {
+    _instance ??= CallStateHandler._();
     return _instance!;
   }
 
-  CallDetector._();
+  CallStateHandler._();
 
   /// Stream that emits the current call state
   Stream<CallState> get onCallStateChanged =>

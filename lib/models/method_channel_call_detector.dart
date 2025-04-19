@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:call_state_handler/src/models/call_state.dart';
+import 'package:call_state_handler/models/call_state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
