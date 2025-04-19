@@ -1,32 +1,81 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+Call State Handler
+A Flutter plugin that detects phone calls and video calls on both Android and iOS platforms. This plugin helps you monitor call states in your app, allowing you to take appropriate actions when calls start or end.
+Features
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages).
+Detect when a phone call is active or ended
+Distinguish between regular phone calls and video/VoIP calls
+Works on both Android and iOS platforms
+Simple Stream-based API for reactive UI updates
+Low battery consumption
+No special permissions required
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages).
--->
+Getting Started
+Add Dependency
+dependencies:
+call_state_handler: ^1.0.0
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
 
-## Features
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
-
-## Getting started
-
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
 
 ## Usage
 
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
+import 'package:call_state_handler/call_detector.dart';
+import 'package:flutter/material.dart';
+
+class CallMonitorExample extends StatefulWidget {
+@override
+_CallMonitorExampleState createState() => _CallMonitorExampleState();
+}
+
+class _CallMonitorExampleState extends State<CallMonitorExample> {
+final CallDetector _callDetector = CallDetector();
+
+@override
+void initState() {
+super.initState();
+_initializeCallDetector();
+}
+
+Future<void> _initializeCallDetector() async {
+await _callDetector.initialize();
+}
+
+@override
+void dispose() {
+_callDetector.dispose();
+super.dispose();
+}
+
+@override
+Widget build(BuildContext context) {
+return Scaffold(
+appBar: AppBar(title: Text('Call Monitor Example')),
+body: StreamBuilder<CallState>(
+stream: _callDetector.onCallStateChanged,
+initialData: CallState(isCallActive: false, callType: CallType.none),
+builder: (context, snapshot) {
+final callState = snapshot.data!;
+
+          return Center(
+            child: Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: callState.isCallActive ? Colors.red.shade100 : Colors.green.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                callState.isCallActive 
+                    ? 'Call Active: ${callState.callType == CallType.phoneCall ? "Phone Call" : "Video Call"}' 
+                    : 'No Active Call',
+                style: Theme.of(context).textTheme.headline6,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+}
+}
 
 ```dart
 const like = 'sample';
