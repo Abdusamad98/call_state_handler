@@ -1,6 +1,6 @@
 name: call_state_handler
 description: "A Flutter plugin that detects phone calls and video calls on both Android and iOS platforms. This plugin helps you monitor call states in your app, allowing you to take appropriate actions when calls start or end."
-version: 1.0.1
+version: 1.1.0
 homepage: https://github.com/Abdusamad98/call_state_handler
 repository: https://github.com/Abdusamad98/call_state_handler
 issue_tracker: https://github.com/Abdusamad98/call_state_handler

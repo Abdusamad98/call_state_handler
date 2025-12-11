@@ -6,17 +6,35 @@ Detect when a phone call is active or ended
 
 Distinguish between regular phone calls and video/VoIP calls  
 
+**Detect video calls from popular apps** including:
+- Google Meet
+- Zoom
+- Microsoft Teams
+- Skype
+- WhatsApp
+- Facebook Messenger
+- Discord
+- And many more video calling apps
+
 Works on both Android and iOS platforms  
 
 Simple Stream-based API for reactive UI updates  
 
 Low battery consumption  
 
-No special permissions required
+Minimal permissions required (see Platform-specific Setup)
 
 ## Platform-specific Setup
 ## Android
-No additional setup required for Android.
+The plugin requires the following permissions (already included in the plugin):
+- `READ_PHONE_STATE` - For detecting phone calls
+- `PACKAGE_USAGE_STATS` (optional) - For detecting video calling apps in foreground
+  - **Note**: This permission requires users to manually grant it in Android Settings > Apps > Special access > Usage access
+  - The plugin will still work for detecting calls via audio mode, but foreground app detection enhances video call detection accuracy
+- `QUERY_ALL_PACKAGES` (Android 11+) - For querying app information
+
+No additional setup required in your app's AndroidManifest.xml as permissions are handled by the plugin.
+
 ## iOS
 Update your Info.plist file to include the following:
 ```
@@ -24,11 +42,24 @@ Update your Info.plist file to include the following:
 <string>App needs call detection to pause activities during calls</string>
 ```
 
+**Note**: iOS has limitations detecting video calls from other apps due to sandboxing. The plugin uses AVAudioSession monitoring to detect when video calling apps are active, but detection may not be as precise as on Android.
+
 ## How It Works
 ## Android
-Uses the Android AudioManager to detect changes in audio session mode, which changes during phone calls and VoIP/video calls.
+- **Phone Calls**: Uses Android AudioManager to detect changes in audio session mode (`MODE_IN_CALL`, `MODE_RINGTONE`)
+- **Video Calls**: Combines audio mode detection with foreground app monitoring:
+  - Monitors audio session mode (`MODE_IN_COMMUNICATION` indicates VoIP/video calls)
+  - Detects when known video calling apps (Google Meet, Zoom, etc.) are in the foreground
+  - Uses ActivityManager/UsageStatsManager to identify active video calling apps
+  - Provides accurate detection by combining both methods
+
 ## iOS
-Implements CallKit's CXCallObserver to monitor call states on iOS devices.
+- **Phone Calls**: Implements CallKit's `CXCallObserver` to monitor phone call states
+- **Video Calls**: Uses AVAudioSession monitoring to detect when video calling apps are active:
+  - Monitors audio session interruptions (when other apps take audio control)
+  - Checks audio route changes (microphone/speaker activation)
+  - Detects when video calling apps use audio input/output simultaneously
+  - Note: iOS sandboxing limits precise detection, but the plugin provides reasonable accuracy
 
 
 

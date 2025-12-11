@@ -1,4 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="com.example.call_state_handler">
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- Optional: For detecting foreground apps on Android 5.0+ -->
+    <!-- Note: PACKAGE_USAGE_STATS requires user to grant permission manually in Settings -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
+    <!-- For querying app information (Android 11+) -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 </manifest>
