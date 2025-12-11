@@ -6,7 +6,7 @@
 * **Android**: Added support for detecting 20+ video calling apps by package name
 * **iOS**: Improved detection accuracy by monitoring audio session interruptions and route changes
 * Updated documentation with new features and platform-specific setup instructions
-* Added optional `PACKAGE_USAGE_STATS` permission for enhanced Android detection (requires user grant)
+* **Privacy-friendly**: Only requires `READ_PHONE_STATE` permission by default. Enhanced detection permissions are optional and documented for apps that need them
 
 ## 1.0.1
 

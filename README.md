@@ -26,14 +26,26 @@ Minimal permissions required (see Platform-specific Setup)
 
 ## Platform-specific Setup
 ## Android
-The plugin requires the following permissions (already included in the plugin):
-- `READ_PHONE_STATE` - For detecting phone calls
-- `PACKAGE_USAGE_STATS` (optional) - For detecting video calling apps in foreground
-  - **Note**: This permission requires users to manually grant it in Android Settings > Apps > Special access > Usage access
-  - The plugin will still work for detecting calls via audio mode, but foreground app detection enhances video call detection accuracy
-- `QUERY_ALL_PACKAGES` (Android 11+) - For querying app information
+The plugin requires only one permission:
+- `READ_PHONE_STATE` - For detecting phone calls (already included in the plugin)
 
-No additional setup required in your app's AndroidManifest.xml as permissions are handled by the plugin.
+**Optional Enhanced Detection:**
+For better video call detection accuracy, you can optionally add these permissions to your app's `AndroidManifest.xml`:
+
+```xml
+<!-- Optional: For detecting foreground video calling apps -->
+<uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+<!-- Android 11+ -->
+<uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+```
+
+**Important Notes:**
+- `PACKAGE_USAGE_STATS` requires users to manually grant it in **Settings > Apps > Special access > Usage access**
+- `QUERY_ALL_PACKAGES` requires Play Store justification for Android 11+
+- **The plugin works perfectly without these permissions** - it will use audio mode detection instead
+- These permissions only enhance detection accuracy for video calling apps
+
+**Recommendation:** Start without these permissions. The plugin detects video calls via audio mode (`MODE_IN_COMMUNICATION`). Only add these if you need enhanced foreground app detection.
 
 ## iOS
 Update your Info.plist file to include the following:
