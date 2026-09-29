@@ -1,12 +1,10 @@
 package com.example.call_state_handler
-import android.app.ActivityManager
-import android.app.usage.UsageStatsManager
+
 import android.content.Context
 import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import androidx.annotation.NonNull
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -14,215 +12,143 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 
-class CallDetectorPlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHandler, CallStateCallback {
+/**
+ * Detects calls by polling the global [AudioManager] mode.
+ *
+ * - Cellular calls (MODE_IN_CALL, MODE_RINGTONE, ...) are reported as "phoneCall".
+ * - MODE_IN_COMMUNICATION is reported as "videoCall" only when VoIP detection is
+ *   enabled and the mode has been stable for [VOIP_DEBOUNCE_CHECKS] checks, because
+ *   voice-message recorders and other apps briefly switch into this mode too.
+ */
+class CallDetectorPlugin : FlutterPlugin, MethodCallHandler, EventChannel.StreamHandler {
     private lateinit var methodChannel: MethodChannel
     private lateinit var eventChannel: EventChannel
     private lateinit var context: Context
     private var audioManager: AudioManager? = null
-    private var activityManager: ActivityManager? = null
-    private var usageStatsManager: UsageStatsManager? = null
     private var eventSink: EventChannel.EventSink? = null
     private val handler = Handler(Looper.getMainLooper())
-    private val audioSessionChecker = Runnable { checkAudioSessionMode() }
+    private val audioModeChecker = Runnable { checkAudioMode() }
     private var isChecking = false
+    private var voipDetectionEnabled = true
+    private var communicationModeChecks = 0
     private var isCallActive = false
-    private var currentCallType = "none"
-    
-    // Known video calling app package names
-    private val videoCallingApps = setOf(
-        "com.google.android.apps.meetings", // Google Meet
-        "us.zoom.videomeetings", // Zoom
-        "com.microsoft.teams", // Microsoft Teams
-        "com.skype.raider", // Skype
-        "com.whatsapp", // WhatsApp
-        "com.facebook.orca", // Facebook Messenger
-        "com.viber.voip", // Viber
-        "com.discord", // Discord
-        "com.tencent.mm", // WeChat
-        "com.snapchat.android", // Snapchat
-        "com.instagram.android", // Instagram
-        "com.google.android.apps.tachyon", // Google Duo (now part of Meet)
-        "com.apple.facetime", // FaceTime (if available on Android)
-        "com.linkedin.android", // LinkedIn
-        "com.webex.meetings", // Cisco Webex
-        "com.gotomeeting", // GoToMeeting
-        "com.bluejeansnetworks.android", // BlueJeans
-        "com.amazon.chime", // Amazon Chime
-        "com.jitsi.meet", // Jitsi Meet
-        "com.ringcentral.meetings" // RingCentral
-    )
+    private var callType = TYPE_NONE
 
-    override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-        context = flutterPluginBinding.applicationContext
-        methodChannel = MethodChannel(flutterPluginBinding.binaryMessenger, "com.example.call_detector/methods")
+    override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        context = binding.applicationContext
+        methodChannel = MethodChannel(binding.binaryMessenger, "com.example.call_detector/methods")
         methodChannel.setMethodCallHandler(this)
 
-        eventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "com.example.call_detector/events")
+        eventChannel = EventChannel(binding.binaryMessenger, "com.example.call_detector/events")
         eventChannel.setStreamHandler(this)
     }
 
-    override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
+    override fun onMethodCall(call: MethodCall, result: Result) {
         when (call.method) {
             "initialize" -> {
-                initializeAudioSessionMonitoring()
+                startMonitoring()
                 result.success(null)
             }
             "dispose" -> {
-                disposeAudioSessionMonitoring()
+                stopMonitoring()
                 result.success(null)
             }
-            else -> {
-                result.notImplemented()
+            "setVoipDetectionEnabled" -> {
+                voipDetectionEnabled = call.argument<Boolean>("enabled") ?: true
+                // Restart the debounce so a recorder that just released
+                // MODE_IN_COMMUNICATION is not reported as a call on re-enable.
+                communicationModeChecks = 0
+                if (isChecking) checkAudioMode()
+                result.success(null)
             }
+            else -> result.notImplemented()
         }
     }
 
-    private fun initializeAudioSessionMonitoring() {
+    private fun startMonitoring() {
+        if (isChecking) return
         audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        }
         isChecking = true
-        handler.post(audioSessionChecker)
+        handler.removeCallbacks(audioModeChecker)
+        handler.post(audioModeChecker)
     }
 
-    private fun disposeAudioSessionMonitoring() {
+    private fun stopMonitoring() {
         isChecking = false
-        handler.removeCallbacks(audioSessionChecker)
+        handler.removeCallbacks(audioModeChecker)
         audioManager = null
-        activityManager = null
-        usageStatsManager = null
+        communicationModeChecks = 0
+        isCallActive = false
+        callType = TYPE_NONE
     }
 
-    private fun checkAudioSessionMode() {
+    private fun checkAudioMode() {
+        handler.removeCallbacks(audioModeChecker)
         if (!isChecking) return
+        val mode = audioManager?.mode ?: return
 
-        audioManager?.let { am ->
-            val mode = am.mode
-            val wasCallActive = isCallActive
-            val foregroundApp = getForegroundAppPackageName()
+        communicationModeChecks = if (isCommunicationMode(mode)) communicationModeChecks + 1 else 0
 
-            // Check if it's a call based on audio mode
-            val audioCallActive = when (mode) {
-                AudioManager.MODE_IN_CALL,
-                AudioManager.MODE_IN_COMMUNICATION,
-                AudioManager.MODE_RINGTONE -> true
-                else -> false
-            }
+        val newType = when {
+            isPhoneCallMode(mode) -> TYPE_PHONE
+            voipDetectionEnabled && communicationModeChecks >= VOIP_DEBOUNCE_CHECKS -> TYPE_VIDEO
+            else -> TYPE_NONE
+        }
+        val newActive = newType != TYPE_NONE
 
-            // Check if a video calling app is in foreground
-            val videoAppActive = foregroundApp != null && videoCallingApps.contains(foregroundApp)
-
-            // Determine call state: active if audio mode indicates call OR video app is active
-            isCallActive = audioCallActive || videoAppActive
-
-            // Determine call type
-            if (isCallActive) {
-                currentCallType = when {
-                    // If a known video calling app is active, it's definitely a video call
-                    videoAppActive -> "videoCall"
-                    // If audio mode is IN_COMMUNICATION, it's likely a VoIP/video call
-                    mode == AudioManager.MODE_IN_COMMUNICATION -> "videoCall"
-                    // Otherwise, it's a regular phone call
-                    else -> "phoneCall"
-                }
-            } else {
-                currentCallType = "none"
-            }
-
-            // Notify only when state changes
-            if (wasCallActive != isCallActive) {
-                onCallStateChanged(isCallActive, currentCallType)
-            }
+        if (newActive != isCallActive || newType != callType) {
+            isCallActive = newActive
+            callType = newType
+            sendState()
         }
 
-        // Schedule next check
-        handler.postDelayed(audioSessionChecker, 1000) // Check every second
+        handler.postDelayed(audioModeChecker, CHECK_INTERVAL_MS)
     }
 
-    /**
-     * Get the package name of the foreground app
-     * Uses ActivityManager for older Android versions and UsageStatsManager for newer ones
-     */
-    private fun getForegroundAppPackageName(): String? {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // Android 10+ (API 29+): Use UsageStatsManager
-                usageStatsManager?.let { usm ->
-                    val time = System.currentTimeMillis()
-                    val stats = usm.queryUsageStats(
-                        UsageStatsManager.INTERVAL_DAILY,
-                        time - 1000 * 60, // Last minute
-                        time
-                    )
-                    stats?.maxByOrNull { it.lastTimeUsed }?.packageName
-                }
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                // Android 5.0+ (API 21+): Try UsageStatsManager first, fallback to ActivityManager
-                usageStatsManager?.let { usm ->
-                    val time = System.currentTimeMillis()
-                    val stats = usm.queryUsageStats(
-                        UsageStatsManager.INTERVAL_DAILY,
-                        time - 1000 * 60,
-                        time
-                    )
-                    stats?.maxByOrNull { it.lastTimeUsed }?.packageName
-                } ?: getForegroundAppFromActivityManager()
-            } else {
-                // Older Android versions: Use ActivityManager
-                getForegroundAppFromActivityManager()
-            }
-        } catch (e: Exception) {
-            // Fallback to ActivityManager if UsageStatsManager fails
-            getForegroundAppFromActivityManager()
-        }
+    private fun isPhoneCallMode(mode: Int): Boolean {
+        if (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_RINGTONE) return true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            mode == AudioManager.MODE_CALL_SCREENING
+        ) return true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            mode == AudioManager.MODE_CALL_REDIRECT
+        ) return true
+        return false
     }
 
-    /**
-     * Fallback method using ActivityManager (works on older Android versions)
-     * Note: This method may not work on Android 5.1+ due to security restrictions
-     */
-    private fun getForegroundAppFromActivityManager(): String? {
-        return try {
-            activityManager?.let { am ->
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    // Android 6.0+ (API 23+)
-                    am.appTasks?.firstOrNull()?.taskInfo?.topActivity?.packageName
-                } else {
-                    // Older versions
-                    @Suppress("DEPRECATION")
-                    am.getRunningTasks(1)?.firstOrNull()?.topActivity?.packageName
-                }
-            }
-        } catch (e: Exception) {
-            null
-        }
+    private fun isCommunicationMode(mode: Int): Boolean {
+        if (mode == AudioManager.MODE_IN_COMMUNICATION) return true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            mode == AudioManager.MODE_COMMUNICATION_REDIRECT
+        ) return true
+        return false
     }
 
-    override fun onCallStateChanged(isCallActive: Boolean, callType: String) {
-        val callStateMap = mapOf(
-            "isCallActive" to isCallActive,
-            "callType" to callType
-        )
-
-        handler.post {
-            eventSink?.success(callStateMap)
-        }
+    private fun sendState() {
+        eventSink?.success(mapOf("isCallActive" to isCallActive, "callType" to callType))
     }
 
     override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
         eventSink = events
+        sendState()
     }
 
     override fun onCancel(arguments: Any?) {
         eventSink = null
     }
 
-    override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
-        disposeAudioSessionMonitoring()
+    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        stopMonitoring()
+        eventSink = null
         methodChannel.setMethodCallHandler(null)
         eventChannel.setStreamHandler(null)
     }
-}
 
+    private companion object {
+        const val TYPE_NONE = "none"
+        const val TYPE_PHONE = "phoneCall"
+        const val TYPE_VIDEO = "videoCall"
+        const val CHECK_INTERVAL_MS = 1000L
+        const val VOIP_DEBOUNCE_CHECKS = 3
+    }
+}

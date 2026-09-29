@@ -1,131 +1,78 @@
 ## Call State Handler
-A Flutter plugin that detects phone calls and video calls on both Android and iOS platforms. This plugin helps you monitor call states in your app, allowing you to take appropriate actions when calls start or end.
+A Flutter plugin that detects active phone calls on Android and iOS, and VoIP/video calls (Google Meet, Zoom, WhatsApp, Teams, ...) on Android. Use it to pause or block parts of your app while the user is on a call.
 
 ## Features
-Detect when a phone call is active or ended  
+- Detects when a phone call starts and ends (Android and iOS)
+- Detects VoIP/video calls on Android
+- **No CallKit** on iOS, so apps using this plugin can be distributed in the China mainland App Store
+- **No permissions required**
+- Does not modify your app's audio session
+- Stream-based API that emits the current state to every new listener
 
-Distinguish between regular phone calls and video/VoIP calls  
+## Platform support
 
-**Detect video calls from popular apps** including:
-- Google Meet
-- Zoom
-- Microsoft Teams
-- Skype
-- WhatsApp
-- Facebook Messenger
-- Discord
-- And many more video calling apps
-
-Works on both Android and iOS platforms  
-
-Simple Stream-based API for reactive UI updates  
-
-Low battery consumption  
-
-Minimal permissions required (see Platform-specific Setup)
-
-## Platform-specific Setup
-## Android
-The plugin requires only one permission:
-- `READ_PHONE_STATE` - For detecting phone calls (already included in the plugin)
-
-**Optional Enhanced Detection:**
-For better video call detection accuracy, you can optionally add these permissions to your app's `AndroidManifest.xml`:
-
-```xml
-<!-- Optional: For detecting foreground video calling apps -->
-<uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
-<!-- Android 11+ -->
-<uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-```
-
-**Important Notes:**
-- `PACKAGE_USAGE_STATS` requires users to manually grant it in **Settings > Apps > Special access > Usage access**
-- `QUERY_ALL_PACKAGES` requires Play Store justification for Android 11+
-- **The plugin works perfectly without these permissions** - it will use audio mode detection instead
-- These permissions only enhance detection accuracy for video calling apps
-
-**Recommendation:** Start without these permissions. The plugin detects video calls via audio mode (`MODE_IN_COMMUNICATION`). Only add these if you need enhanced foreground app detection.
-
-## iOS
-Update your Info.plist file to include the following:
-```
-<key>NSCallingCapabilityUsageDescription</key>
-<string>App needs call detection to pause activities during calls</string>
-```
-
-**Note**: iOS has limitations detecting video calls from other apps due to sandboxing. The plugin uses AVAudioSession monitoring to detect when video calling apps are active, but detection may not be as precise as on Android.
+| | Phone calls | VoIP / video calls |
+|---|---|---|
+| Android | ✅ | ✅ |
+| iOS | ✅ | ❌ (see below) |
 
 ## How It Works
-## Android
-- **Phone Calls**: Uses Android AudioManager to detect changes in audio session mode (`MODE_IN_CALL`, `MODE_RINGTONE`)
-- **Video Calls**: Combines audio mode detection with foreground app monitoring:
-  - Monitors audio session mode (`MODE_IN_COMMUNICATION` indicates VoIP/video calls)
-  - Detects when known video calling apps (Google Meet, Zoom, etc.) are in the foreground
-  - Uses ActivityManager/UsageStatsManager to identify active video calling apps
-  - Provides accurate detection by combining both methods
+### Android
+The plugin checks the system audio mode (`AudioManager.getMode()`) once per second:
+- `MODE_IN_CALL` / `MODE_RINGTONE` (and call screening/redirect modes) → `CallType.phoneCall`
+- `MODE_IN_COMMUNICATION` → `CallType.videoCall`, reported only after the mode has been stable for about 3 seconds
 
-## iOS
-- **Phone Calls**: Implements CallKit's `CXCallObserver` to monitor phone call states
-- **Video Calls**: Uses AVAudioSession monitoring to detect when video calling apps are active:
-  - Monitors audio session interruptions (when other apps take audio control)
-  - Checks audio route changes (microphone/speaker activation)
-  - Detects when video calling apps use audio input/output simultaneously
-  - Note: iOS sandboxing limits precise detection, but the plugin provides reasonable accuracy
+Some non-call features also switch the device into `MODE_IN_COMMUNICATION`, for example voice-message recorders, voice chat in games and some Bluetooth headsets. If your app records audio itself, turn VoIP detection off while recording (see [Recording audio in your app](#recording-audio-in-your-app)).
 
+### iOS
+Phone calls are detected with CoreTelephony's `CTCallCenter`.
 
+iOS offers no reliable way to detect VoIP/video calls from other apps without CallKit. Apps that use CallKit are not allowed in the China mainland App Store, so this plugin does not use it and reports only regular phone calls on iOS. `setVoipDetectionEnabled` does nothing on iOS.
 
 ## Usage
-## Basic Implementation
+### Basic Implementation
 
-```
+```dart
+import 'package:call_state_handler/call_state_handler.dart';
+import 'package:flutter/material.dart';
+
 class CallMonitorExample extends StatefulWidget {
+  const CallMonitorExample({super.key});
+
   @override
-  _CallMonitorExampleState createState() => _CallMonitorExampleState();
+  State<CallMonitorExample> createState() => _CallMonitorExampleState();
 }
 
 class _CallMonitorExampleState extends State<CallMonitorExample> {
-  final CallDetector _callDetector = CallDetector();
-  
+  final CallStateHandler _callStateHandler = CallStateHandler();
+
   @override
   void initState() {
     super.initState();
-    _initializeCallDetector();
+    _callStateHandler.initialize();
   }
-  
-  Future<void> _initializeCallDetector() async {
-    await _callDetector.initialize();
-  }
-  
+
   @override
   void dispose() {
-    _callDetector.dispose();
+    _callStateHandler.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Call Monitor Example')),
+      appBar: AppBar(title: const Text('Call Monitor Example')),
       body: StreamBuilder<CallState>(
-        stream: _callDetector.onCallStateChanged,
-        initialData: CallState(isCallActive: false, callType: CallType.none),
+        stream: _callStateHandler.onCallStateChanged,
+        initialData: _callStateHandler.currentState,
         builder: (context, snapshot) {
           final callState = snapshot.data!;
-          
           return Center(
-            child: Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: callState.isCallActive ? Colors.red.shade100 : Colors.green.shade100,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                callState.isCallActive 
-                    ? 'Call Active: ${callState.callType == CallType.phoneCall ? "Phone Call" : "Video Call"}' 
-                    : 'No Active Call',
-                style: Theme.of(context).textTheme.headline6,
-              ),
+            child: Text(
+              callState.isCallActive
+                  ? 'Call Active: ${callState.callType == CallType.phoneCall ? "Phone Call" : "Video Call"}'
+                  : 'No Active Call',
+              style: Theme.of(context).textTheme.titleLarge,
             ),
           );
         },
@@ -134,40 +81,61 @@ class _CallMonitorExampleState extends State<CallMonitorExample> {
   }
 }
 ```
-## With BLoC/Cubit
 
-```
+### With BLoC/Cubit
+
+```dart
+import 'dart:async';
+
+import 'package:call_state_handler/call_state_handler.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
 class CallMonitorCubit extends Cubit<CallState> {
-  final CallDetector _callDetector = CallDetector();
+  final CallStateHandler _callStateHandler = CallStateHandler();
   StreamSubscription<CallState>? _subscription;
 
-  CallMonitorCubit() : super(CallState(isCallActive: false, callType: CallType.none)) {
-    _initialize();
-  }
-
-  Future<void> _initialize() async {
-    await _callDetector.initialize();
-    _subscription = _callDetector.onCallStateChanged.listen((callState) {
-      emit(callState);
-    });
+  CallMonitorCubit() : super(const CallState.initial()) {
+    _subscription = _callStateHandler.onCallStateChanged.listen(emit);
+    _callStateHandler.initialize();
   }
 
   @override
   Future<void> close() async {
     await _subscription?.cancel();
-    await _callDetector.dispose();
+    await _callStateHandler.dispose();
     return super.close();
   }
 }
-
-
 ```
-## Error Handling
-The plugin automatically handles most error cases. If you encounter any issues, make sure to:
 
-Call initialize() before using the detector
-Handle the disposal properly with dispose() when you're done
-Check platform compatibility for your specific use case
+### Recording audio in your app
+If your app records voice messages or otherwise uses the microphone, disable VoIP detection while recording. Otherwise the recording can be reported as a video call on Android:
+
+```dart
+await CallStateHandler().setVoipDetectionEnabled(false);
+try {
+  await recorder.start(...);
+  // ...
+  await recorder.stop();
+} finally {
+  // Always re-enable, even if recording fails; the flag is global.
+  await CallStateHandler().setVoipDetectionEnabled(true);
+}
+```
+
+Phone calls are still detected while VoIP detection is disabled.
+
+### API notes
+- `CallStateHandler()` is a singleton, and `initialize()`/`dispose()` are reference counted. Several widgets can use it at the same time, as long as each one balances its `initialize()` with one `dispose()`. Monitoring stops only when the last one disposes.
+- `onCallStateChanged` emits the current state immediately to each new listener, then every change.
+- `currentState` returns the latest known state synchronously.
+- When the last `dispose()` stops monitoring, an inactive state is emitted, so a call-blocking UI is never left stuck. The stream stays usable, and you can call `initialize()` again later.
+
+## Migrating from 1.x
+- iOS no longer uses CallKit and no longer reports `CallType.videoCall`.
+- Android no longer inspects the foreground app. You can remove the `PACKAGE_USAGE_STATS` and `QUERY_ALL_PACKAGES` permissions if you added them only for this plugin.
+- The plugin no longer declares `READ_PHONE_STATE`, and `NSCallingCapabilityUsageDescription` is no longer needed.
+- `CallState` now has value equality and a `const` constructor.
 
 ## Contributing
 Contributions are welcome! If you find any issues or have suggestions for improvements:
