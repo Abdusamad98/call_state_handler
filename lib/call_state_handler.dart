@@ -35,9 +35,9 @@ class CallStateHandler {
     return CallDetectorPlatform.instance.dispose();
   }
 
-  /// Enables or disables VoIP/video call detection (Android only; no-op on
-  /// iOS). Disable it while your app records audio itself, e.g. voice
-  /// messages, since recording can look like a VoIP call to the system.
+  /// Enables or disables VoIP/video call detection. Phone calls are always
+  /// detected. On Android, disable it while your app records audio itself,
+  /// e.g. voice messages, since recording can look like a VoIP call there.
   Future<void> setVoipDetectionEnabled(bool enabled) {
     return CallDetectorPlatform.instance.setVoipDetectionEnabled(enabled);
   }

@@ -29,6 +29,7 @@ abstract class CallDetectorPlatform extends PlatformInterface {
   /// is emitted, only when the last caller disposes.
   Future<void> dispose();
 
-  /// Enables or disables VoIP/video call detection. No-op on iOS.
+  /// Enables or disables VoIP/video call detection. Phone calls are always
+  /// detected.
   Future<void> setVoipDetectionEnabled(bool enabled);
 }

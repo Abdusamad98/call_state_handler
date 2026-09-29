@@ -1,3 +1,16 @@
+## 3.0.0
+
+**Breaking changes**
+* **iOS**: Uses CallKit (`CXCallObserver`) again. Apps that link CallKit are rejected from the China mainland App Store; stay on 2.x if you distribute there.
+
+**New**
+* **iOS**: Detects VoIP/video calls from apps that report calls to CallKit (FaceTime, WhatsApp, Telegram, Zoom, Google Meet, Teams, ...) and reports them as `CallType.videoCall`. Cellular calls are still reported as `CallType.phoneCall`, using CoreTelephony to tell them apart.
+* **iOS**: Ringing, dialing and held calls are detected through CallKit, which is the source of truth for whether a call exists.
+* **iOS**: `setVoipDetectionEnabled` is now supported.
+
+**Docs**
+* README: documented Android VoIP detection limitations (ringing VoIP calls, delay, false positives, stuck audio mode).
+
 ## 2.0.0
 
 **Breaking changes**

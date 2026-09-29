@@ -1,18 +1,29 @@
+import CallKit
 import CoreTelephony
 import Flutter
 import UIKit
 
-/// Detects cellular phone calls with CoreTelephony's CTCallCenter.
+/// Detects calls with CallKit's CXCallObserver, which sees every call the
+/// system knows about: cellular calls and calls from VoIP apps that report them
+/// to CallKit (FaceTime, WhatsApp, Telegram, Zoom, Google Meet, Teams, ...).
 ///
-/// CallKit is intentionally not used: apps linking CallKit are rejected for the
-/// China mainland App Store. Without CallKit there is no reliable way to detect
-/// VoIP/video calls from other apps, so iOS only reports "phoneCall". The app's
-/// AVAudioSession is never touched.
-public class CallDetectorPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
+/// CXCall does not say which app owns a call, so CoreTelephony's CTCallCenter,
+/// which lists cellular calls only, classifies it: a call CallKit sees while
+/// CTCallCenter also sees one is "phoneCall", otherwise "videoCall". CallKit is
+/// the source of truth for whether any call exists, so a stale CTCallCenter
+/// entry can never report a call on its own. The app's AVAudioSession is never
+/// touched.
+public class CallDetectorPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, CXCallObserverDelegate {
+    private static let typeNone = "none"
+    private static let typePhone = "phoneCall"
+    private static let typeVideo = "videoCall"
+
+    private var callObserver: CXCallObserver?
     private var callCenter: CTCallCenter?
     private var didBecomeActiveObserver: NSObjectProtocol?
     private var eventSink: FlutterEventSink?
-    private var isCallActive = false
+    private var voipDetectionEnabled = true
+    private var callType = CallDetectorPlugin.typeNone
 
     public static func register(with registrar: FlutterPluginRegistrar) {
         let methodChannel = FlutterMethodChannel(
@@ -36,7 +47,9 @@ public class CallDetectorPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
             stopMonitoring()
             result(nil)
         case "setVoipDetectionEnabled":
-            // VoIP detection is not available on iOS.
+            let arguments = call.arguments as? [String: Any]
+            voipDetectionEnabled = arguments?["enabled"] as? Bool ?? true
+            refreshState()
             result(nil)
         default:
             result(FlutterMethodNotImplemented)
@@ -44,13 +57,21 @@ public class CallDetectorPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
     }
 
     private func startMonitoring() {
-        guard callCenter == nil else { return }
+        guard callObserver == nil else { return }
+        let observer = CXCallObserver()
+        // A nil queue delivers delegate calls on the main queue.
+        observer.setDelegate(self, queue: nil)
+        callObserver = observer
+
         let center = CTCallCenter()
-        // The handler runs on a background queue.
+        // CTCallCenter can update after CallKit has already reported a cellular
+        // call; refresh again so the call is reclassified as "phoneCall". The
+        // handler runs on a background queue.
         center.callEventHandler = { [weak self] _ in
             DispatchQueue.main.async { self?.refreshState() }
         }
         callCenter = center
+
         // Call events can be delayed while the app is suspended; re-check on resume.
         didBecomeActiveObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
@@ -65,25 +86,46 @@ public class CallDetectorPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
             NotificationCenter.default.removeObserver(observer)
             didBecomeActiveObserver = nil
         }
+        callObserver?.setDelegate(nil, queue: nil)
+        callObserver = nil
         callCenter?.callEventHandler = nil
         callCenter = nil
-        isCallActive = false
+        callType = CallDetectorPlugin.typeNone
     }
 
     private func refreshState() {
-        guard let center = callCenter else { return }
-        let active = center.currentCalls?.contains { $0.callState != CTCallStateDisconnected } ?? false
-        if active != isCallActive {
-            isCallActive = active
+        guard let observer = callObserver else { return }
+        // Ringing, dialing, connected and held calls all count, like Android's
+        // MODE_RINGTONE / MODE_IN_CALL.
+        let hasCall = observer.calls.contains { !$0.hasEnded }
+        let hasCellularCall = callCenter?.currentCalls?.contains {
+            $0.callState != CTCallStateDisconnected
+        } ?? false
+
+        let newType: String
+        if hasCall && hasCellularCall {
+            newType = CallDetectorPlugin.typePhone
+        } else if hasCall && voipDetectionEnabled {
+            newType = CallDetectorPlugin.typeVideo
+        } else {
+            newType = CallDetectorPlugin.typeNone
+        }
+
+        if newType != callType {
+            callType = newType
             sendState()
         }
     }
 
     private func sendState() {
         eventSink?([
-            "isCallActive": isCallActive,
-            "callType": isCallActive ? "phoneCall" : "none",
+            "isCallActive": callType != CallDetectorPlugin.typeNone,
+            "callType": callType,
         ])
+    }
+
+    public func callObserver(_ callObserver: CXCallObserver, callChanged call: CXCall) {
+        refreshState()
     }
 
     public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {

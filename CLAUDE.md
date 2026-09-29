@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`call_state_handler` is a published Flutter plugin (pub.dev) that detects active phone calls on Android (Kotlin) and iOS (Swift), and VoIP/video calls on Android only. Its main consumer shows a "blocker" UI while the user is on a call, so **false positives (reporting a call when there is none) are the worst bug class**.
+`call_state_handler` is a published Flutter plugin (pub.dev) that detects active phone calls and VoIP/video calls on Android (Kotlin) and iOS (Swift). Its main consumer shows a "blocker" UI while the user is on a call, so **false positives (reporting a call when there is none) are the worst bug class**.
 
 ## Commands
 
@@ -25,7 +25,7 @@ Release checklist: bump `version` in `pubspec.yaml` **and** `ios/call_state_hand
 
 ## Hard constraints
 
-- **Never use CallKit on iOS** (no `import CallKit`, no `CXCallObserver`). Apps that link it are rejected from the China mainland App Store. After an iOS change, verify with `otool -L example/build/ios/iphoneos/Runner.app/Frameworks/call_state_handler.framework/call_state_handler`. It should list only CoreTelephony and system libraries.
+- **iOS links CallKit since 3.0.0** (China mainland is no longer a target; 2.x is the CallKit-free line). Never add CallKit *provider* APIs (`CXProvider`, `CXCallController`): the plugin only observes calls. Check linked frameworks with `otool -L example/build/ios/iphoneos/Runner.app/Frameworks/call_state_handler.framework/call_state_handler`.
 - **Never modify the host app's `AVAudioSession`** (category, activation). Host apps have their own players and recorders.
 - **Android must not require permissions.** Detection uses only `AudioManager.getMode()`. Foreground-app detection (UsageStats/ActivityManager) was removed in 2.0.0 because it caused false positives.
 
@@ -60,5 +60,7 @@ These names are hardcoded in Dart, `android/.../CallDetectorPlugin.kt` and `ios/
 
 ### iOS (`CallDetectorPlugin.swift`)
 
-- `CTCallCenter.callEventHandler` (called on a background queue, then dispatched to main) → any call in `currentCalls` that is not `CTCallStateDisconnected` → `phoneCall`. The state is also re-checked on `UIApplication.didBecomeActiveNotification`.
-- There is no VoIP detection, and `setVoipDetectionEnabled` is a no-op. CTCallCenter is deprecated, but it is the only CallKit-free option. Real-device testing is required, because simulators have no telephony.
+- `CXCallObserver` (delegate on the main queue) is the source of truth: a call exists iff some `CXCall` has `!hasEnded` (ringing/dialing/held included).
+- `CXCall` does not identify the owning app, so `CTCallCenter.currentCalls` (cellular only; handler on a background queue, dispatched to main) classifies: CallKit call + CT call → `phoneCall`, otherwise `videoCall` (only when VoIP detection is enabled). A CT call alone never reports a call, so stale CT state cannot cause a false positive.
+- The state is also re-checked on `UIApplication.didBecomeActiveNotification`.
+- Only apps that report calls to CallKit are seen (browser meetings are not). Real-device testing is required, because simulators have no telephony.
